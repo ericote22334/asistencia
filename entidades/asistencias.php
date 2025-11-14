@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 include '../db.php';
 session_start();
 if (!isset($_SESSION['id_usuario'])) {
@@ -6,11 +6,34 @@ if (!isset($_SESSION['id_usuario'])) {
     exit;
 }
 
-// Consulta correcta con JOINs para traer datos de asistencias completos
+if (isset($_GET['borrar'])) {
+    $id = intval($_GET['borrar']);
+    $stmtDelete = $conn->prepare("DELETE FROM asistencias WHERE id = ?");
+    if ($stmtDelete) {
+        $stmtDelete->bind_param("i", $id);
+        $stmtDelete->execute();
+        $stmtDelete->close();
+    }
+    header("Location: asistencias.php");
+    exit;
+}
+
+$rfidColumnExists = false;
+$columnCheck = $conn->query("SHOW COLUMNS FROM asistencias LIKE 'rfid'");
+if ($columnCheck) {
+    $rfidColumnExists = $columnCheck->num_rows > 0;
+    $columnCheck->free();
+}
+
+$nombreExpr = $rfidColumnExists
+    ? "COALESCE(u_alumno.nombre_completo, u_rfid.nombre_completo, 'Sin nombre asociado')"
+    : "COALESCE(u_alumno.nombre_completo, 'Sin nombre asociado')";
+$rfidJoin = $rfidColumnExists ? "LEFT JOIN usuarios u_rfid ON a.rfid = u_rfid.rfid" : "";
+
 $sql = "
 SELECT 
     a.id,
-    u.nombre_completo,
+    {$nombreExpr} AS nombre_completo,
     h.hora_inicio,
     h.hora_fin,
     d.nombre AS division,
@@ -18,10 +41,11 @@ SELECT
     a.estado,
     a.notas
 FROM asistencias a
-JOIN alumnos al ON a.alumno_id = al.id
-JOIN usuarios u ON al.usuario_id = u.id
-JOIN horarios h ON a.horario_id = h.id
-JOIN divisiones d ON a.division_id = d.id
+LEFT JOIN alumnos al ON a.alumno_id = al.id
+LEFT JOIN usuarios u_alumno ON al.usuario_id = u_alumno.id
+{$rfidJoin}
+LEFT JOIN horarios h ON a.horario_id = h.id
+LEFT JOIN divisiones d ON a.division_id = d.id
 ORDER BY a.fecha DESC, a.id DESC
 ";
 
@@ -31,9 +55,9 @@ if (!$result) {
     die("Error en la consulta SQL: " . $conn->error);
 }
 
-if ($result->num_rows == 0) {
-    echo "<p>No se encontraron registros de asistencia.</p>";
-    exit;
+$asistencias = [];
+while ($row = $result->fetch_assoc()) {
+    $asistencias[] = $row;
 }
 ?>
 
@@ -44,8 +68,11 @@ if ($result->num_rows == 0) {
 </head>
 <body>
 <div class="container">
-<a href="../inicio.php" class="return-link">Volver</a>    
+<a href="../inicio.php" class="return-link">Volver</a>
 <h2>Asistencias</h2>
+<?php if (empty($asistencias)) : ?>
+    <p>No se encontraron registros de asistencia.</p>
+<?php else : ?>
 <table>
 <thead>
 <tr>
@@ -53,30 +80,30 @@ if ($result->num_rows == 0) {
     <th>Alumno</th>
     <th>Hora Inicio</th>
     <th>Hora Fin</th>
-    <th>División</th>
+    <th>Division</th>
     <th>Fecha</th>
     <th>Estado</th>
     <th>Notas</th>
-    <th>Acción</th>
+    <th>Accion</th>
 </tr>
 </thead>
 <tbody>
-<?php while ($row = $result->fetch_assoc()) : ?>
+<?php foreach ($asistencias as $row) : ?>
 <tr>
     <td><?= $row['id'] ?></td>
     <td><?= htmlspecialchars($row['nombre_completo']) ?></td>
-    <td><?= $row['hora_inicio'] ?></td>
-    <td><?= $row['hora_fin'] ?></td>
-    <td><?= htmlspecialchars($row['division']) ?></td>
+    <td><?= $row['hora_inicio'] !== null ? $row['hora_inicio'] : '-' ?></td>
+    <td><?= $row['hora_fin'] !== null ? $row['hora_fin'] : '-' ?></td>
+    <td><?= $row['division'] !== null ? htmlspecialchars($row['division']) : '-' ?></td>
     <td><?= $row['fecha'] ?></td>
     <td><?= htmlspecialchars($row['estado']) ?></td>
-    <td><?= htmlspecialchars($row['notas']) ?></td>
-    <td><a href="?borrar=<?= $row['id'] ?>" onclick="return confirm('¿Eliminar esta asistencia?')">Eliminar</a></td>
+    <td><?= $row['notas'] !== null ? htmlspecialchars($row['notas']) : '-' ?></td>
+    <td><a href="?borrar=<?= $row['id'] ?>" onclick="return confirm('Eliminar esta asistencia?')">Eliminar</a></td>
 </tr>
-<?php endwhile; ?>
+<?php endforeach; ?>
 </tbody>
 </table>
-
+<?php endif; ?>
 </div>
 </body>
 </html>

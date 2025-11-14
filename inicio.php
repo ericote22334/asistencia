@@ -1,13 +1,33 @@
 <?php
 session_start();
 if (!isset($_SESSION['id_usuario'])) {
-    header("Location: login.php"); exit;
+    header('Location: index.php');
+    exit;
+}
+
+$rol = $_SESSION['rol'] ?? '';
+if ($rol !== 'administrador') {
+    switch ($rol) {
+        case 'alumno':
+            header('Location: panel_alumno.php');
+            break;
+        case 'docente':
+            header('Location: panel_docente.php');
+            break;
+        case 'preceptor':
+            header('Location: panel_preceptor.php');
+            break;
+        default:
+            header('Location: index.php');
+            break;
+    }
+    exit;
 }
 ?>
 <html>
 <head><link rel="stylesheet" href="styles.css"></head>
 <body>
-<h1>Panel principal</h1>
+<h1>Panel de administrador</h1>
 <nav>
 <ul>
     <li><a href="entidades/usuarios.php">Usuarios</a></li>
